@@ -4432,6 +4432,18 @@ def as_launch_processing_thread():
     thread = threading.Thread(target=wrapper, daemon=True)
     thread.start()
 
+def toggle_alignment_advanced_rows(sender=None, app_data=None, user_data=None):
+    # Check if the selected item is the first one in the list (Standard/Basic)
+    # Or you can check if app_data == "Standard"
+    as_alignment_method = dpg.get_value("as_alignment_method")
+    is_basic = (as_alignment_method == CN.AS_ALIGN_METHOD_LIST[0])
+    
+    
+    # Toggle show/hide for the three rows
+    dpg.configure_item("as_time_shift_min", show=not is_basic)
+    dpg.configure_item("as_time_shift_max", show=not is_basic)
+    dpg.configure_item("as_peak_search_offset", show=not is_basic)
+   
 def as_start_processing_callback():
     """ 
     GUI function to handle AIR processing and AIR to BRIR conversion.
@@ -4494,6 +4506,7 @@ def as_start_processing_callback():
         octave_smoothing_n = dpg.get_value("octave_smoothing_n")
         drr_correction = dpg.get_value("as_drr_correction")
         drr_corr_strength = dpg.get_value("as_drr_corr_strength")
+        alignment_method = dpg.get_value("as_alignment_method")
 
         # --------------------------------------------------
         # MAIN LOOP (single folder or batch)
@@ -4591,7 +4604,7 @@ def as_start_processing_callback():
                 pitch_range=pitch_range, tail_mode=reverb_tail_mode, random_seed=random_seed,
                 cancel_event=cancel_event, report_progress=3, noise_reduction_mode=noise_reduction_mode, f_alignment = alignment_freq, spatial_exp_method=spatial_exp_method,
                 pitch_shift_comp=pitch_shift_comp,subwoofer_mode=as_subwoofer_mode, binaural_mode=binaural_meas_inputs, correction_factor=correction_factor, 
-                time_shift_min=time_shift_min, time_shift_max=time_shift_max, peak_search_offset=peak_search_offset
+                time_shift_min=time_shift_min, time_shift_max=time_shift_max, peak_search_offset=peak_search_offset, alignment_method=alignment_method
             )
     
             if status_code != 0:
@@ -4649,13 +4662,17 @@ def as_start_processing_callback():
             notes = (
                 f"Created with ASH Toolset {__version__} on {timestamp_str} | "
                 
-                f"reverb_tail_mode={reverb_tail_mode}, " 
-                f"low-freq_mode={as_subwoofer_mode}, "
-                f"binaural_meas_inputs={binaural_meas_inputs}, "
-                f"noise_reduction_mode={noise_reduction_mode}, "
+                f"reverb_tail={reverb_tail_mode}, " 
+                f"low-freq={as_subwoofer_mode}, "
+                f"binaural_meas={binaural_meas_inputs}, "
+                f"noise_reduction={noise_reduction_mode}, "
                 f"rise_time={rise_time}ms, "
                 f"correction_factor={correction_factor}, "
                 f"alignment_freq={alignment_freq}Hz, "
+                f"alignment_method={alignment_method}, "
+                f"time_shift_min={time_shift_min}, "
+                f"time_shift_max={time_shift_max}, "
+                f"search_offset={peak_search_offset}, "
                 f"grid_points={grid_points}, "
                 f"speaker_count={speaker_count}, "
                 f"distr_mode={distr_mode}, "
@@ -4663,15 +4680,14 @@ def as_start_processing_callback():
                 f"random_seed={random_seed}, "
                 f"pitch_range=({pitch_low}, {pitch_high}), "
                 f"pitch_shift_comp={pitch_shift_comp}, "
+                f"decay_corr={drr_correction}, " 
+                f"drr_corr_strength={drr_corr_strength}, "
                 f"listener_type={as_listener_type}, "
-                f"listener_name={listener_name}"
+                f"listener_name={listener_name}, "
                 f"corner_value={corner_value}, " 
                 f"azimuth_spread={azimuth_spread}, "    
-                f"decay_correction={drr_correction}, " 
-                f"drr_corr_strength={drr_corr_strength}, "
-                f"time_shift_min={time_shift_min}, "
-                f"time_shift_max={time_shift_max}, "
-                f"pk_search_offset={peak_search_offset}, "
+                
+                
             )
             description_full = notes if not description.strip() else f"{description}, {notes}"
             low_rt60 = "No" if reverb_tail_mode.lower().startswith("long") else "Yes"

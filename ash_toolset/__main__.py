@@ -400,6 +400,8 @@ def main():
         cb.e_apo_update_elev_list()
         cb.fde_update_angle_list()
         
+        cb.toggle_alignment_advanced_rows()
+        
         #populate user guide
         load_user_guide_into_gui()
         
@@ -724,6 +726,9 @@ def main():
         "brir_hp_comp": CN.HP_COMP_LIST,
         "brir_elf": CN.ELF_LIST,
         "sub_response": CN.SUB_RESPONSE_LIST_GUI,
+        "brir_df_cal_mode": CN.BRIR_DF_CAL_MODE_LIST,
+        "as_spatial_exp_method": CN.AS_SPAT_EXP_LIST,
+        "as_alignment_method": CN.AS_ALIGN_METHOD_LIST,
         "e_apo_prevent_clip": CN.AUTO_GAIN_METHODS,
         "e_apo_upmix_method": CN.UPMIXING_METHODS
     }
@@ -2104,6 +2109,16 @@ def main():
                                             dpg.add_text("Low-pass cutoff used for time-domain alignment. The frequency used to isolate low-end phase information for timing calculations")
                                             dpg.add_text("Min: 50 Hz, Max: 150 Hz")
                                             
+                                    with dpg.table_row():
+                                        dpg.add_text("Alignment Method")
+                                        dpg.bind_item_font(dpg.last_item(), font_b_def)
+         
+                                        dpg.add_combo(items=CN.AS_ALIGN_METHOD_LIST,default_value=loaded_values["as_alignment_method"],label="",tag="as_alignment_method",width=184,callback=cb.toggle_alignment_advanced_rows)
+                                        with dpg.tooltip("as_alignment_method"):
+                                            dpg.add_text("Determines the tuning logic for time-domain low-frequency alignment")
+                                            dpg.add_text("Standard uses pre-tuned, optimized defaults for stable phase response")
+                                            dpg.add_text("Custom uses the manual Shift Limits and Search Offset controls below")
+                                            
                                     # ---------- Shift Range ----------
                                     with dpg.table_row():
                                         dpg.add_text("Min. Shift Limit")
@@ -2111,7 +2126,7 @@ def main():
                                         with dpg.group():
                                             dpg.add_input_float(label="",tag="as_time_shift_min",width=120,default_value=loaded_values["as_time_shift_min"],min_value=-6.0,max_value=-1.0,format="%.2f",min_clamped=True,max_clamped=True)
                                         with dpg.tooltip("as_time_shift_min"):
-                                            dpg.add_text("Maximum negative time shift allowed (in half-cycles) to achieve phase alignment")
+                                            dpg.add_text("Constrains how far the IR can be shifted forward in time (negative half-cycles) to achieve phase coherency")
                                             
                                     with dpg.table_row():
                                         dpg.add_text("Max. Shift Limit")
@@ -2119,7 +2134,7 @@ def main():
                                         with dpg.group():
                                             dpg.add_input_float(label="",tag="as_time_shift_max",width=120,default_value=loaded_values["as_time_shift_max"],min_value=0.0,max_value=6.0,format="%.2f",min_clamped=True,max_clamped=True)
                                         with dpg.tooltip("as_time_shift_max"):
-                                            dpg.add_text("Maximum positive time shift allowed (in half-cycles) to achieve phase alignment")
+                                            dpg.add_text("Constrains how far the IR can be delayed (positive half-cycles) to achieve phase coherency")
 
                                     with dpg.table_row():
                                         dpg.add_text("Search Offset (Samples)")
@@ -2157,7 +2172,7 @@ def main():
                                     with dpg.table_row():
                                         dpg.add_text("IR Distribution Mode")
                                         dpg.bind_item_font(dpg.last_item(), font_b_def)
-                                        dpg.add_combo(items=CN.AS_DISTR_MODE_LIST,default_value=loaded_values["as_ir_dist_mode"],label="",tag="as_ir_dist_mode",width=180)
+                                        dpg.add_combo(items=CN.AS_DISTR_MODE_LIST,default_value=loaded_values["as_ir_dist_mode"],label="",tag="as_ir_dist_mode",width=184)
                                         with dpg.tooltip("as_ir_dist_mode"):
                                             dpg.add_text("Determines how the dataset of measurements are assigned to the virtual speaker sources")
                                             dpg.add_text("Sequential: Distributes blocks of neighboring measurements to sources")
@@ -2202,7 +2217,7 @@ def main():
                                         dpg.add_text("Pitch Shift Correction")
                                         dpg.bind_item_font(dpg.last_item(), font_b_def)
          
-                                        dpg.add_combo(items=CN.AS_PS_COMP_LIST,default_value=loaded_values["as_pitch_shift_comp"],label="",tag="as_pitch_shift_comp",width=180)
+                                        dpg.add_combo(items=CN.AS_PS_COMP_LIST,default_value=loaded_values["as_pitch_shift_comp"],label="",tag="as_pitch_shift_comp",width=184)
                                         with dpg.tooltip("as_pitch_shift_comp"):
                                             dpg.add_text("Corrects magnitude response after dataset expansion")
                                             dpg.add_text("Note: Does not apply to binaural inputs.")
@@ -2229,7 +2244,7 @@ def main():
                                  
                                         dpg.add_text("Listener")
                                         dpg.bind_item_font(dpg.last_item(), font_b_def)
-                                        dpg.add_combo(items=CN.AS_LISTENER_TYPE_LIST,default_value=loaded_values["as_listener"],label="",tag="as_listener",width=180)
+                                        dpg.add_combo(items=CN.AS_LISTENER_TYPE_LIST,default_value=loaded_values["as_listener"],label="",tag="as_listener",width=184)
                                         with dpg.tooltip("as_listener"):
                                             dpg.add_text("Controls which listener will be used to apply binaural transformations")
                                             dpg.add_text("If set to 'User Selection', the current listener selection in the first tab will be used")

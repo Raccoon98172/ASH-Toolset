@@ -574,26 +574,27 @@ def refresh_hp_comp():
     HP_COMP_LIST = []
     HP_COMP_LIST_SHORT = []
     
-    # We only iterate up to the shorter of the two (metadata vs array)
     for i, row in enumerate(temp_metadata):
-        if i < num_ir_entries:
-            # .strip() removes leading/trailing spaces, tabs, and newlines
-            long_name = row['long_name'].strip()
-            short_name = row['short_name'].strip()
-            
-            # Populate the Lists
-            HP_COMP_LIST.append(long_name)
-            HP_COMP_LIST_SHORT.append(short_name)
-            
-            # Populate the Dict
-            HP_COMP_DICT[long_name] = {
-                "long_name": long_name,
-                "short_name": short_name,
-                "impulse_response": HP_COMP_arr[i]
-            }
-        else:
-            # Optional: Log that some metadata rows have no matching IR in the .npy
+        if i >= num_ir_entries:
             break
+            
+        # --- NEW FILTER LOGIC ---
+        # Check if 'show' column exists and is exactly 'Yes'
+        if row.get('show', 'Yes').strip().lower() != 'yes':
+            continue 
+        # ------------------------
+
+        long_name = row['long_name'].strip()
+        short_name = row['short_name'].strip()
+        
+        HP_COMP_LIST.append(long_name)
+        HP_COMP_LIST_SHORT.append(short_name)
+        
+        HP_COMP_DICT[long_name] = {
+            "long_name": long_name,
+            "short_name": short_name,
+            "impulse_response": HP_COMP_arr[i]
+        }
 
     # 4. Rebuild access helpers
     HP_COMP_KEYS = HP_COMP_LIST
@@ -634,26 +635,26 @@ def refresh_elf():
     ELF_LIST = []
     ELF_LIST_SHORT = []
     
-    # We only iterate up to the shorter of the two (metadata vs array)
     for i, row in enumerate(temp_metadata):
-        if i < num_ir_entries:
-            # .strip() removes leading/trailing spaces, tabs, and newlines
-            long_name = row['long_name'].strip()
-            short_name = row['short_name'].strip()
-            
-            # Populate the Lists
-            ELF_LIST.append(long_name)
-            ELF_LIST_SHORT.append(short_name)
-            
-            # Populate the Dict
-            ELF_DICT[long_name] = {
-                "long_name": long_name,
-                "short_name": short_name,
-                "impulse_response": ELF_arr[i]
-            }
-        else:
-            # Optional: Log that some metadata rows have no matching IR in the .npy
+        if i >= num_ir_entries:
             break
+
+        # --- NEW FILTER LOGIC ---
+        if row.get('show', 'Yes').strip().lower() != 'yes':
+            continue
+        # ------------------------
+
+        long_name = row['long_name'].strip()
+        short_name = row['short_name'].strip()
+        
+        ELF_LIST.append(long_name)
+        ELF_LIST_SHORT.append(short_name)
+        
+        ELF_DICT[long_name] = {
+            "long_name": long_name,
+            "short_name": short_name,
+            "impulse_response": ELF_arr[i]
+        }
 
     # 4. Rebuild access helpers
     ELF_KEYS = ELF_LIST
@@ -817,8 +818,8 @@ T_SHIFT_INTERVAL = 25#50
 CUTOFF_ALIGNMENT_AIR = 110#110,100
 CUTOFF_ALIGNMENT_TR_AIR = CUTOFF_ALIGNMENT_AIR#transformation applied cases, 140, 130, 120
 PEAK_TO_PEAK_WINDOW_AIR = int(np.divide(SAMP_FREQ,CUTOFF_ALIGNMENT_AIR)*0.95) 
-MIN_T_SHIFT_A = -750#-1000,-1000  
-MAX_T_SHIFT_A = 500#250,1000
+MIN_T_SHIFT_A = -1000#-1000
+MAX_T_SHIFT_A = 250#250
 DELAY_WIN_MIN_A = 0
 DELAY_WIN_MAX_A = 1000#1000
 DELAY_WIN_HOPS_A = int((DELAY_WIN_MAX_A-DELAY_WIN_MIN_A)/DELAY_WIN_HOP_SIZE)
@@ -934,7 +935,7 @@ BUTTON_IMAGE_OFF='off_image'
 
 
 HRTF_DF_CAL_MODE_LIST = ['Enable Calibration','Retain Diffuse-field','Retain and level spectrum ends']
-BRIR_DF_CAL_MODE_LIST = ['Min Phase Inverse FIR','Parametric EQ']
+BRIR_DF_CAL_MODE_LIST = ['Min. Phase FIR - Enhanced','Min. Phase FIR - Simple','Parametric EQ']
 PLOT_TYPE_LIST = ['Magnitude Response','Impulse Response','Group Delay', 'Decay']
 PLOT_TYPE_LIST_IA = ['Magnitude Response','Impulse Response','Group Delay', 'Decay','Summary Response']
 HPCF_TARGET_LIST = [
@@ -1248,7 +1249,8 @@ AS_TAIL_MODE_LIST = ['Short','Short Windowed','Long','Long Windowed']
 AS_LISTENER_TYPE_LIST = ['FABIAN HATS','KU-100 Dummy Head','User Selection']
 AS_DISTR_MODE_LIST = ["Sequential", "Round-robin", "Random", "Single"]
 AS_PS_COMP_LIST = ["Disable", "Restore Original Curve", "Reshape to Global Reference"]
-AS_SPAT_EXP_LIST = ["Disable", "Pitch Shift - Frequency-based", "Pitch Shift - Time-based"]
+AS_SPAT_EXP_LIST = ["Disable", "Pitch Shift - Simple", "Pitch Shift - Frequency-based", "Pitch Shift - Time-based"]
+AS_ALIGN_METHOD_LIST = ["Standard", "Custom"]
 #load other lists from csv file
 
 # Global variable declarations for clarity
@@ -1596,6 +1598,7 @@ DEFAULTS = {
     "as_rise_time": 3.0,
     "as_rm_cor_factor": 1.0,
     "as_listener": AS_LISTENER_TYPE_LIST[0],
+    "as_alignment_method": AS_ALIGN_METHOD_LIST[1],
     "as_alignment_freq": 110,
     "as_grid_points": 360,
     "as_speaker_count": 7,

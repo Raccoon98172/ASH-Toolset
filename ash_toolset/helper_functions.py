@@ -1292,8 +1292,228 @@ def plot_average_measurements(file_path: str):
 
 
 
+#3.7.0
+def expand_measurements_simple(
+    measurement_array: np.ndarray,
+    desired_measurements: int,
+    fs: int = CN.SAMP_FREQ,
+    pitch_range: tuple = (-12, 12),
+    shuffle: bool = False,
+    antialias: bool = False,   # unused
+    seed=65529189939976765123732762606216328531,
+    plot_sample: int = 0,      # unused
+    num_threads: int = 4,
+    gui_logger=None,
+    cancel_event=None,
+    pitch_shift_comp=True,
+    ignore_ms: float = CN.IGNORE_MS,
+    report_progress=0
+) -> tuple[np.ndarray, int]:
+    """
+    Expand a measurement array by generating pitch-shifted variants.
+    Includes optional per-IR compensation, multithreading, and progress updates.
+
+    Returns:
+        output array (N, L), status code:
+            0 = success
+            1 = failure
+            2 = cancelled
+    """
+
+    # ------------------------------------------------------------
+    # Constants & Setup
+    # ------------------------------------------------------------
+    n_fft        = 4096
+    truncate_len = 512
+    f_min        = 20
+    f_max        = 20000
+
+    measurement_array = measurement_array.astype(np.float64, copy=False)
+    base_n, sample_len = measurement_array.shape
+
+    output = np.empty((desired_measurements, sample_len), dtype=np.float64)
+    status = 1
+    
 
 
+    # ------------------------------------------------------------
+    # Precompute magnitude spectra of ORIGINAL IRs for compensation
+    # ------------------------------------------------------------
+    orig_mag = np.abs(np.fft.rfft(measurement_array, n=n_fft, axis=1))
+
+    # ------------------------------------------------------------
+    # Pitch shift value generator
+    # ------------------------------------------------------------
+    if abs(pitch_range[0]) < 1e-6 and abs(pitch_range[1]) < 1e-6:
+        pitch_range = (-12, 12)
+        log_with_timestamp("Invalid pitch range, resetting to default (0, 24)", gui_logger)
+
+ 
+    # --- UPDATED SEED LOGIC ---
+    if seed == 0:
+        # Consistency with other functions: Use time-based volatile seed
+        effective_seed = int(time.time() * 1000) % 2**32
+    elif seed == 1:#use seed from 3.7.0
+        effective_seed = 65529189939976765123732762606216328531
+    else:
+        effective_seed = seed
+    log_with_timestamp(f"Measurement Expansion started (Seed: {effective_seed})")
+
+    rng = np.random.default_rng(effective_seed)
+    pitch_shifts = rng.uniform(pitch_range[0], pitch_range[1], desired_measurements)
+
+    # ------------------------------------------------------------
+    # Helper: Pitch shift
+    # ------------------------------------------------------------
+    def apply_pitch_shift(ir, shift_val):
+        return librosa.effects.pitch_shift(
+            ir, sr=fs, n_steps=shift_val, res_type="kaiser_best"
+        )
+
+    # ------------------------------------------------------------
+    # Helper: Build compensation filter for ONE IR
+    # ------------------------------------------------------------
+    def build_compensation_filter(shifted_ir, ir_index):
+        shifted_ir = shifted_ir.ravel() # Force 1D
+        shifted_mag = np.abs(np.fft.rfft(shifted_ir, n=n_fft))
+        ref_mag = orig_mag[ir_index].ravel() # Force 1D
+
+        comp_mag = ref_mag / np.maximum(shifted_mag, 1e-12)
+        
+   
+        # === Apply HF taper to stabilise high-frequency compensation ===
+        hf_start = 7500.0     #8000 start taper (Hz)
+        hf_end   = 9000.0    #1000 full stop (Hz)
+        
+        # frequency bin conversion (resolution = fs / n_fft)
+        bin_start = int(np.round(hf_start * n_fft / fs))
+        bin_end   = int(np.round(hf_end   * n_fft / fs))
+        
+        # clamp to valid bins of comp_mag
+        n_bins = comp_mag.shape[-1]
+        bin_start = max(0, min(bin_start, n_bins - 1))
+        bin_end   = max(0, min(bin_end, n_bins))
+        
+        # if there is no taper region, simply force HF to 1.0
+        if bin_end <= bin_start:
+            comp_mag[bin_start:] = 1.0
+        else:
+            # build cosine taper that goes 1 -> 0 across the region
+            length = bin_end - bin_start
+            t = np.linspace(0.0, np.pi, length, endpoint=True)
+            taper = 0.5 * (1.0 + np.cos(t))   # 1 -> 0
+        
+            # Blend comp_mag toward 1.0 across the taper window:
+            seg = comp_mag[bin_start:bin_end]
+            comp_mag[bin_start:bin_end] = seg * taper + (1.0 - taper)
+        
+            # Above the taper region, disable compensation entirely
+            comp_mag[bin_end:] = 1.0
+
+        smoothed_mag = smooth_gaussian_octave(data=comp_mag, n_fft=n_fft,fs=fs, fraction=5)#v4.0.0 4
+        
+  
+
+        return build_min_phase_filter_simple(
+            smoothed_mag,
+            fs=fs,
+            n_fft=n_fft,
+            truncate_len=truncate_len,
+            f_min=f_min,
+            f_max=f_max,
+            band_limit=True
+        )
+
+    # ------------------------------------------------------------
+    # Thread Process Function
+    # ------------------------------------------------------------
+    count_lock = threading.Lock()
+    count = 0
+    last_print_time = time.time()
+
+    def process_one(i):
+        nonlocal count, last_print_time
+
+        if cancel_event and cancel_event.is_set():
+            return None
+
+        ir_index = i % base_n
+        ir       = measurement_array[ir_index].ravel()
+        shift    = pitch_shifts[i]
+
+        try:
+            # 1) Pitch shift
+            shifted = apply_pitch_shift(ir, shift)
+            shifted = np.squeeze(shifted) # Add this to force 1D
+
+            # 2) Pad or crop to original length
+            if len(shifted) < sample_len:
+                temp = np.zeros(sample_len)
+                temp[:len(shifted)] = shifted
+                shifted = temp
+            else:
+                shifted = shifted[:sample_len]
+
+            # 3) Compensation
+            if pitch_shift_comp:
+                comp = build_compensation_filter(shifted, ir_index)
+                shifted = sp.signal.fftconvolve(shifted, comp, mode="same")
+
+            # 4) Progress tracking
+            with count_lock:
+                count += 1
+                now = time.time()
+                if (count % 100 == 0) or (count == desired_measurements) or (now - last_print_time >= 5.0):
+                    log_with_timestamp(
+                        f"Expansion Progress: {count}/{desired_measurements} measurements processed.",
+                        gui_logger
+                    )
+                    last_print_time = now
+
+                    if report_progress > 0:
+                        a, b = 0.1, 0.35
+                        progress = a + (count / desired_measurements) * (b - a)
+                        update_gui_progress(report_progress, progress=progress)
+
+            return i, shifted
+
+        except Exception as e:
+            log_with_timestamp(f"Error processing measurement {i}: {e}", gui_logger)
+            return i, None
+
+    # ------------------------------------------------------------
+    # ThreadPool execution
+    # ------------------------------------------------------------
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=num_threads) as executor:
+            futures = [executor.submit(process_one, i) for i in range(desired_measurements)]
+
+            for f in concurrent.futures.as_completed(futures):
+                if cancel_event and cancel_event.is_set():
+                    status = 2
+                    log_with_timestamp("Expansion cancelled by user.", gui_logger)
+                    return output, status
+
+                result = f.result()
+                if result is None:
+                    status = 2
+                    log_with_timestamp("Expansion cancelled by user.", gui_logger)
+                    return output, status
+
+                idx, shifted = result
+                output[idx] = shifted if shifted is not None else np.zeros(sample_len)
+
+        status = 0
+        log_with_timestamp("Expansion complete.", gui_logger)
+
+        if shuffle:
+            rng.shuffle(output)
+
+    except Exception as e:
+        log_with_timestamp(f"Exception in expansion: {e}", gui_logger)
+        status = 1
+
+    return output, status
 
 
 def expand_measurements(
@@ -3202,6 +3422,69 @@ def smooth_gaussian_octave(
         result[:nyq_bin + 1] = smoothed[:nyq_bin + 1]
         result[nyq_bin + 1:] = smoothed[1:nyq_bin][::-1]
         return result
+
+
+def build_min_phase_filter_simple(
+    smoothed_mag,
+    fs=CN.FS,
+    n_fft=CN.N_FFT,
+    truncate_len=4096,
+    f_min=20,
+    f_max=20000,
+    band_limit=False
+):
+    """
+    Build a minimum-phase FIR filter from a magnitude spectrum (half or full).
+    
+    Parameters:
+        smoothed_mag (np.ndarray): Magnitude spectrum (half-spectrum or full-spectrum). Not log scale.
+        fs (int): Sampling frequency in Hz.
+        n_fft (int): FFT size.
+        truncate_len (int): Length to truncate time-domain IR.
+        f_min (float): Minimum band-limit frequency.
+        f_max (float): Maximum band-limit frequency.
+        band_limit (bool): Whether to band-limit the magnitude before conversion.
+
+    Returns:
+        np.ndarray: Minimum-phase FIR filter (real impulse response).
+    """
+    # Ensure half-spectrum
+    is_half = len(smoothed_mag) == n_fft // 2 + 1
+    if not is_half:
+        smoothed_mag = np.abs(smoothed_mag[:n_fft // 2 + 1])
+
+    freqs = np.fft.rfftfreq(n_fft, 1 / fs)
+
+    # Band-limit magnitude if requested
+    if band_limit:
+        band_mask = (freqs >= f_min) & (freqs <= f_max)
+        mag = np.zeros_like(smoothed_mag)
+        mag[band_mask] = smoothed_mag[band_mask]
+    else:
+        mag = smoothed_mag.copy()
+
+    # Avoid log(0)
+    log_mag = np.log(np.maximum(mag, 1e-8))
+
+    # Real cepstrum
+    cepstrum = np.fft.irfft(log_mag, n=n_fft)
+
+    # Enforce minimum-phase symmetry (real cepstrum trick)
+    cepstrum[1:n_fft // 2] *= 2
+    cepstrum[n_fft // 2 + 1:] = 0
+
+    # Rebuild min-phase spectrum
+    min_phase_spec = np.exp(np.fft.rfft(cepstrum, n=n_fft))
+
+    # Time-domain impulse response
+    impulse = np.fft.irfft(min_phase_spec, n=n_fft)
+
+    # Truncate and apply fade-out window
+    impulse = impulse[:truncate_len]
+    fade_out = np.hanning(2 * truncate_len)[truncate_len:]
+    impulse *= fade_out
+
+    return impulse
 
 
 def build_min_phase_filter( 

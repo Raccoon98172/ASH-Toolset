@@ -749,9 +749,7 @@ def generate_integrated_brir(brir_name,  spatial_res=1, report_progress=0, gui_l
                 hf.log_with_timestamp("HRTF CTF DF response not available, skipping HRTF DF reintegration.", gui_logger)
                 
         #create min phase FIR
-        if brir_df_cal_mode == CN.BRIR_DF_CAL_MODE_LIST[0]:
-            brir_df_inv_fir = hf.build_min_phase_filter(smoothed_mag=brir_fft_avg_mag_inv,  truncate_len=gen_fir_length, n_fft=CN.N_FFT)#v4.0.0 truncate_len=4096
-        elif brir_df_cal_mode == CN.BRIR_DF_CAL_MODE_LIST[1]:
+        if brir_df_cal_mode == CN.BRIR_DF_CAL_MODE_LIST[2]:#parametric
             # 1. Define your impulse (e.g., 8192 samples long)
             n_fft_param = 8192 
             impulse = np.zeros((1, 1, n_fft_param))
@@ -762,6 +760,12 @@ def generate_integrated_brir(brir_name,  spatial_res=1, report_progress=0, gui_l
                                                          num_filters=50,low_freq_cut = 12.0, high_freq_cut = 18000.0)
             # 3. Extract the 1D array for easy convolution later
             brir_df_inv_fir = eq_ir_dataset.flatten()
+        else:
+            if brir_df_cal_mode == CN.BRIR_DF_CAL_MODE_LIST[1]:#simple
+                brir_df_inv_fir = hf.build_min_phase_filter_simple(smoothed_mag=brir_fft_avg_mag_inv,  truncate_len=gen_fir_length, n_fft=CN.N_FFT)
+            else:#enhanced
+                brir_df_inv_fir = hf.build_min_phase_filter(smoothed_mag=brir_fft_avg_mag_inv,  truncate_len=gen_fir_length, n_fft=CN.N_FFT)
+                
         
         if report_progress > 0:
             progress = 80/100

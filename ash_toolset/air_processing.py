@@ -581,8 +581,10 @@ def prepare_air_dataset(
     pitch_range=(0, 12), random_seed=0,
     tail_mode="short",  # options: "short", "long", "short windowed" 
     window_type="hanning",  # new parameter: "hanning" or "triangle"
-    report_progress=0, cancel_event=None, f_alignment = 0, pitch_shift_comp=CN.AS_PS_COMP_LIST[1], spatial_exp_method=CN.AS_SPAT_EXP_LIST[1],
-    ignore_ms=CN.IGNORE_MS, subwoofer_mode=False, binaural_mode=False, air_data=None, correction_factor=1.0, time_shift_min=-3.0, time_shift_max=3.0, peak_search_offset=150
+    report_progress=0, cancel_event=None, f_alignment = 0, pitch_shift_comp=CN.AS_PS_COMP_LIST[1], 
+    spatial_exp_method=CN.AS_SPAT_EXP_LIST[1], alignment_method=CN.AS_ALIGN_METHOD_LIST[1],
+    ignore_ms=CN.IGNORE_MS, subwoofer_mode=False, binaural_mode=False, air_data=None, correction_factor=1.0, 
+    time_shift_min=-3.0, time_shift_max=3.0, peak_search_offset=150
 ):
     """
     Loads and processes individual acoustic IR files from a dataset folder, extracting the impulse responses
@@ -733,7 +735,7 @@ def prepare_air_dataset(
         hf.log_with_timestamp(log_string_a, gui_logger)
 
         # Shift raw IRs so that direct peak is at sample x
-        index_peak_ref = 40#30  # Target alignment point
+        index_peak_ref = 30#30,40  # Target alignment point
         if binaural_mode:
             step = 2  # L/R pair
         else:
@@ -758,15 +760,27 @@ def prepare_air_dataset(
         #if total IRs below threshold #total_measurements < ir_min_threshold   total_measurements < desired_measurements
         if total_measurements < desired_measurements and subwoofer_mode==False and binaural_mode == False and spatial_exp_method != CN.AS_SPAT_EXP_LIST[0]:
       
-            log_string_a = 'Expanding IR dataset'
+            log_string_a = f'Expanding IR dataset ({spatial_exp_method})'
             align_start_time = time.time()
             hf.log_with_timestamp(log_string_a, gui_logger)
-            #expand dataset by creating new IRs using pitch shifting
-            air_data, status_code = hf.expand_measurements(
-                measurement_array=air_data,
-                desired_measurements=desired_measurements,pitch_range=pitch_range,gui_logger=gui_logger, seed=random_seed,
-                cancel_event=cancel_event,report_progress=report_progress, pitch_shift_comp=pitch_shift_comp,ignore_ms=ignore_ms,pitch_shift_mode=spatial_exp_method
-            ) 
+            
+            if spatial_exp_method == CN.AS_SPAT_EXP_LIST[1]:
+                #simple method
+                air_data, status_code = hf.expand_measurements_simple(
+                    measurement_array=air_data,
+                    desired_measurements=desired_measurements,pitch_range=pitch_range,gui_logger=gui_logger,
+                    cancel_event=cancel_event,report_progress=report_progress, pitch_shift_comp=pitch_shift_comp,ignore_ms=ignore_ms, seed=random_seed
+                ) 
+     
+            else:
+                #expand dataset by creating new IRs using pitch shifting
+                air_data, status_code = hf.expand_measurements(
+                    measurement_array=air_data,
+                    desired_measurements=desired_measurements,pitch_range=pitch_range,gui_logger=gui_logger, seed=random_seed,
+                    cancel_event=cancel_event,report_progress=report_progress, pitch_shift_comp=pitch_shift_comp,ignore_ms=ignore_ms,pitch_shift_mode=spatial_exp_method
+                ) 
+            
+            
             if status_code > 0:#failure or cancelled
                 return air_data, status_code
             align_end_time = time.time()
@@ -844,13 +858,39 @@ def prepare_air_dataset(
             hf.log_with_timestamp(log_string_a, gui_logger)
 
             print_interval = 100  # Print every 100 IRs (adjust as needed)
+            
+            #3.7.0
+            data_pad_zeros=np.zeros(n_fft)
+            t_shift_interval = CN.T_SHIFT_INTERVAL
+            min_t_shift = CN.MIN_T_SHIFT_A
+            max_t_shift = CN.MAX_T_SHIFT_A
+            num_intervals = int(np.abs((max_t_shift - min_t_shift) / t_shift_interval))
+            order = CN.ORDER
+            delay_win_min_t = CN.DELAY_WIN_MIN_A
+            delay_win_hop_size = CN.DELAY_WIN_HOP_SIZE
+            delay_win_hops = CN.DELAY_WIN_HOPS_A
+            peak_to_peak_window = int(np.divide(samp_freq_ash, cutoff_alignment) * 1.0)
+            delay_eval_set = np.zeros((total_measurements, num_intervals))
+            
+            
 
             for idx in range(0, total_measurements, step):
                 
-                start_sample=peak_search_offset# 4.2.0 was 220 now dynamic
-                lookahead_samples = start_sample + int(0.8*CN.FS/cutoff_alignment)#1.15
-                align_ir_static_window(idx=idx, air_data=air_data, shifts=shifts, lp_sos=lp_sos, binaural_mode=binaural_mode, start_sample=start_sample, lookahead_samples=lookahead_samples)
-       
+                if alignment_method == CN.AS_ALIGN_METHOD_LIST[0]:
+                    #3.7.0 original method
+                    align_ir_2d(
+                        idx, air_data, data_pad_zeros,
+                        t_shift_interval, min_t_shift, max_t_shift, num_intervals, order,
+                        delay_win_min_t, delay_win_hop_size, delay_win_hops,
+                        cutoff_alignment, samp_freq_ash, delay_eval_set, peak_to_peak_window, lp_sos
+                    )
+                    
+                else:
+                    #custom (4.2.0)
+                    start_sample=peak_search_offset# 4.2.0 was 220 now dynamic
+                    lookahead_samples = start_sample + int(0.8*CN.FS/cutoff_alignment)#1.15
+                    align_ir_static_window(idx=idx, air_data=air_data, shifts=shifts, lp_sos=lp_sos, binaural_mode=binaural_mode, start_sample=start_sample, lookahead_samples=lookahead_samples)
+   
                 # --- Progress logging ---
                 if (idx + step) % print_interval == 0 or idx + step >= total_measurements:
                     if report_progress > 0:
@@ -864,7 +904,7 @@ def prepare_air_dataset(
             
             align_end_time = time.time()
             log_string_a = f"Time-domain alignment completed in {align_end_time - align_start_time:.2f} seconds."
-            log_string_b = "Time-domain alignment completed"
+            log_string_b = f"Time-domain alignment completed ({alignment_method})"
             hf.log_with_timestamp(log_string_a)
             hf.log_with_timestamp(log_string_b, gui_logger)
         
@@ -2391,3 +2431,73 @@ def align_ir_static_window(
         plt.grid(True, which='both', linestyle='--', alpha=0.3)
         plt.tight_layout()
         plt.show()     
+        
+def align_ir_2d(
+    idx, air_data, data_pad_zeros,
+    t_shift_interval, min_t_shift, max_t_shift, num_intervals, order,
+    delay_win_min_t, delay_win_hop_size, delay_win_hops,
+    cutoff_alignment, samp_freq_ash, delay_eval_set, peak_to_peak_window, lp_sos,
+    debug=False
+):
+    """
+    Optimized time-domain alignment for a single IR using peak-to-peak analysis.
+
+    Parameters:
+        idx (int): Index of the IR to align.
+        air_data (np.ndarray): IR dataset of shape (N, T).
+        data_pad_zeros (np.ndarray): Zero-initialized array of shape (T,) for temporary use.
+        debug (bool): If True, prints detailed debug information for the alignment process.
+    """
+    crop_length = 16000
+    samples_shift = 0
+
+    if idx == 0:
+        if debug:
+            print(f"[Debug] IR {idx} is reference. No shift applied.")
+        return  # First IR is reference
+
+    # Efficient average of prior IRs
+    prior_airs = np.mean(air_data[:idx, :crop_length], axis=0)
+
+    this_air = air_data[idx][:crop_length]
+
+    if not np.any(this_air):  # Skip if silent
+        if debug:
+            print(f"[Debug] IR {idx} is silent. No shift applied.")
+        return
+
+    # Filter both IRs
+    prior_lp = hf.apply_sos_filter(prior_airs, lp_sos, filtfilt=CN.FILTFILT_TDALIGN_AIR)
+    this_lp = hf.apply_sos_filter(this_air, lp_sos, filtfilt=CN.FILTFILT_TDALIGN_AIR)
+
+    # Generate shifted versions
+    shifts = min_t_shift + np.arange(num_intervals) * t_shift_interval
+    shifted_ir_stack = np.empty((num_intervals, crop_length), dtype=this_lp.dtype)
+    for i, shift in enumerate(shifts):
+        shifted_ir_stack[i] = np.roll(this_lp, shift)
+
+    summed = shifted_ir_stack + prior_lp
+
+    # Evaluate peak-to-peak energy over sliding windows
+    peak_to_peak_values = np.zeros(num_intervals)
+    for hop_id in range(delay_win_hops):
+        start = delay_win_min_t + hop_id * delay_win_hop_size
+        end = start + peak_to_peak_window
+        segment = summed[:, start:end]
+        ptp_values = segment.max(axis=1) - segment.min(axis=1)
+        np.maximum(peak_to_peak_values, ptp_values, out=peak_to_peak_values)
+
+    # Find best shift
+    best_index = np.argmax(peak_to_peak_values)
+    samples_shift = shifts[best_index]
+    delay_eval_set[idx, :] = peak_to_peak_values
+
+    # Apply shift
+    air_data[idx] = np.roll(air_data[idx], int(samples_shift))
+
+    if samples_shift < 0:
+        air_data[idx, min_t_shift:] = 0.0
+
+    if debug:
+        print(f"[Debug] IR {idx}: shift={samples_shift}, max_peak2peak={peak_to_peak_values[best_index]:.6f}")
+        
