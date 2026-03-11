@@ -1,4 +1,4 @@
-#VERSION: 4.2.0
+#VERSION: 4.2.1
 
 [Audio Processing Overview]
 Head-Related Transfer Functions (HRTFs):
@@ -256,6 +256,7 @@ Steps for importing and processing acoustic spaces:
 		* Single: Assigns exactly one measurement (or L/R pair) to each virtual speaker.
 	- Alignment Frequency (Hz): Cutoff frequency for time-domain alignment.
 		* Minimum: 50, Maximum: 150
+	- Alignment Method: Determines the tuning logic for time-domain low-frequency alignment. Standard uses pre-tuned, optimized defaults for stable phase response. Custom uses the manual Shift Limits and Search Offset controls below.
 	- Min. Shift Limit: Maximum negative time shift allowed (in half-cycles) to achieve phase alignment.
 		* Minimum: -6, Maximum: -1
 	- Max. Shift Limit: Maximum positive time shift allowed (in half-cycles) to achieve phase alignment.
