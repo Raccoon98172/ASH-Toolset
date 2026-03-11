@@ -1589,6 +1589,8 @@ DEFAULTS = {
     "octave_smoothing_n": 6,
     "brir_df_cal_factor":1.0,
     "gen_fir_length":4096,
+    "brir_df_cal_low_f":10,
+    "brir_df_cal_high_f":19500,
     
     # AS Import tool
     "as_reverb_tail_mode": AS_TAIL_MODE_LIST[0],

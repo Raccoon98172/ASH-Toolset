@@ -2634,6 +2634,22 @@ def main():
                                     with dpg.tooltip("octave_smoothing_n"):
                                         dpg.add_text("Sets the fractional octave smoothing for calibration filters (e.g., 3 = 1/3 octave). Higher values result in more detail; lower values result in a smoother curve.")
                                     
+                                    
+                                # Low Cutoff Frequency
+                                with dpg.table_row():
+                                    dpg.add_text("Binaural Sim.")
+                                    dpg.add_text("Calibration Low Cutoff Freq. (Hz)")
+                                    dpg.add_input_int(label="", width=190, tag='brir_df_cal_low_f', min_value=1, max_value=500,default_value=loaded_values["brir_df_cal_low_f"],min_clamped=True, max_clamped=True)
+                                    with dpg.tooltip("brir_df_cal_low_f"):
+                                        dpg.add_text("The lower frequency limit for inversion. Below this point, the correction magnitude is clamped to the value at this limit to avoid over-excursion.")
+                                
+                                # High Cutoff Frequency
+                                with dpg.table_row():
+                                    dpg.add_text("Binaural Sim.")
+                                    dpg.add_text("Calibration High Cutoff Freq. (Hz)")
+                                    dpg.add_input_int(label="", width=190, tag='brir_df_cal_high_f', min_value=5000, max_value=22050,default_value=loaded_values["brir_df_cal_high_f"],min_clamped=True, max_clamped=True)
+                                    with dpg.tooltip("brir_df_cal_high_f"):
+                                        dpg.add_text("The upper frequency limit for inversion. Above this point, the magnitude is extended (clamped) to prevent sharp high-frequency rises or artifacts.")    
                                 
                                 with dpg.table_row():
                                     dpg.add_text("Binaural Sim.")

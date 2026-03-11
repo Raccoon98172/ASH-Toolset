@@ -3172,6 +3172,8 @@ def get_brir_dict():
     hp_rolloff_comp = dpg.get_value('hp_rolloff_comp')
     fb_filtering = dpg.get_value('fb_filtering')
     brir_max_length = dpg.get_value('brir_max_length')
+    brir_df_cal_low_f = dpg.get_value('brir_df_cal_low_f')
+    brir_df_cal_high_f = dpg.get_value('brir_df_cal_high_f')
     
 
     brir_meta_dict = {
@@ -3226,7 +3228,7 @@ def get_brir_dict():
         'room_target': room_target, 'room_target_int': room_target_int, 'direct_gain_db': direct_gain_db, 
         'ac_space_short': ac_space_short,   'ac_space_gui': ac_space_gui, 'brir_hp_comp': brir_hp_comp, 'brir_elf':brir_elf,
         'samp_freq_int': samp_freq_int, 'samp_freq_str': samp_freq_str,   
-        'bit_depth': bit_depth, 'bit_depth_str': bit_depth_str, 
+        'bit_depth': bit_depth, 'bit_depth_str': bit_depth_str, 'brir_df_cal_low_f': brir_df_cal_low_f, 'brir_df_cal_high_f': brir_df_cal_high_f, 
  
         # Additional variables
         'hrtf_symmetry': hrtf_symmetry, 'er_delay_time': er_delay_time, 'reverb_tail_crop_db': reverb_tail_crop_db, 'brir_df_cal_mode':brir_df_cal_mode, 'brir_max_length':brir_max_length,

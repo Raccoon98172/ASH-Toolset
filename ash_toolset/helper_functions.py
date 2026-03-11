@@ -1963,6 +1963,8 @@ def equalize_brirs_parametric(
     and applies filtering via FFT convolution for massive speed gains.
     """
     # --- 1. Preparation ---
+    low_freq_cut = float(low_freq_cut)
+    high_freq_cut = float(high_freq_cut)
     brir_dataset = np.asarray(brir_dataset, dtype=np.float64)
     orig_shape = brir_dataset.shape
     n_samples = orig_shape[-1]

@@ -85,6 +85,8 @@ def generate_integrated_brir(brir_name,  spatial_res=1, report_progress=0, gui_l
             octave_smoothing_n=brir_meta_dict.get("octave_smoothing_n")
             brir_df_cal_factor=brir_meta_dict.get("brir_df_cal_factor")
             gen_fir_length=brir_meta_dict.get("gen_fir_length")
+            brir_df_cal_low_f=brir_meta_dict.get("brir_df_cal_low_f")
+            brir_df_cal_high_f=brir_meta_dict.get("brir_df_cal_high_f")
         else:
             raise ValueError('brir_meta_dict not populated')
             
@@ -725,7 +727,7 @@ def generate_integrated_brir(brir_name,  spatial_res=1, report_progress=0, gui_l
         #convert to mag
         brir_fft_avg_mag = hf.db2mag(brir_fft_avg_db)      
         #level ends of spectrum
-        brir_fft_avg_mag_sm = hf.level_spectrum_ends(brir_fft_avg_mag, 15, 18500, smooth_win = octave_smoothing_n, n_fft=CN.N_FFT)#40, 19000, smooth_win = 7 
+        brir_fft_avg_mag_sm = hf.level_spectrum_ends(brir_fft_avg_mag, brir_df_cal_low_f, brir_df_cal_high_f, smooth_win = octave_smoothing_n, n_fft=CN.N_FFT)#40, 19000, smooth_win = 7 
         #octave smoothing
         brir_fft_avg_mag_sm = hf.smooth_gaussian_octave(data=brir_fft_avg_mag_sm, n_fft=CN.N_FFT, fraction=octave_smoothing_n)
         
@@ -757,7 +759,7 @@ def generate_integrated_brir(brir_name,  spatial_res=1, report_progress=0, gui_l
             # 2. Run your function with the override
             # This will return the EQ-IR as a (1, 1, n_fft) array
             eq_ir_dataset = hf.equalize_brirs_parametric(brir_dataset=impulse, diff_db_override=hf.mag2db(brir_fft_avg_mag_inv), override_n_fft=CN.N_FFT, 
-                                                         num_filters=50,low_freq_cut = 12.0, high_freq_cut = 18000.0)
+                                                         num_filters=50,low_freq_cut = brir_df_cal_low_f, high_freq_cut = brir_df_cal_high_f)
             # 3. Extract the 1D array for easy convolution later
             brir_df_inv_fir = eq_ir_dataset.flatten()
         else:
